@@ -1,0 +1,15 @@
+{
+	"name": "adf-delearn-hp",
+	"properties": {
+		"trustModeClaimForMi": {
+			"value": "Disabled",
+			"editable": true
+		}
+	},
+	"location": "southeastasia",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "b4c5fe67-7436-4930-8ca8-33f6ab2d1b86",
+		"tenantId": "44e3cf94-19c9-4e32-96c3-14f5bf01391a"
+	}
+}

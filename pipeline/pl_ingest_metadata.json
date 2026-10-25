@@ -1,0 +1,140 @@
+{
+	"name": "pl_ingest_metadata",
+	"properties": {
+		"activities": [
+			{
+				"name": "lkp_config",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "SELECT source_schema, source_table, target_folder\nFROM etl.copy_config\nWHERE is_enabled = 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "ds_sql_table",
+						"type": "DatasetReference",
+						"parameters": {
+							"schema_name": "etl",
+							"table_name": "copy_config"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "fe_tables",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "lkp_config",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('lkp_config').output.value",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"batchCount": 4,
+					"activities": [
+						{
+							"name": "cp_table",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.00:30:00",
+								"retry": 2,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"sink": {
+									"type": "ParquetSink",
+									"storeSettings": {
+										"type": "AzureBlobFSWriteSettings"
+									},
+									"formatSettings": {
+										"type": "ParquetWriteSettings"
+									}
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"typeConversion": true,
+									"typeConversionSettings": {
+										"allowDataTruncation": true,
+										"treatBooleanAsNumber": false
+									}
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "ds_sql_table",
+									"type": "DatasetReference",
+									"parameters": {
+										"schema_name": {
+											"value": "@item().source_schema",
+											"type": "Expression"
+										},
+										"table_name": {
+											"value": "@item().source_table",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "ds_adls_parquet",
+									"type": "DatasetReference",
+									"parameters": {
+										"container": {
+											"value": "bronze",
+											"type": "Expression"
+										},
+										"folder": {
+											"value": "@concat('adf/', item().target_folder, '/load_date=', formatDateTime(utcNow(), 'yyyy-MM-dd'))",
+											"type": "Expression"
+										},
+										"file_name": {
+											"value": "@concat(item().source_table, '.parquet')",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					]
+				}
+			}
+		],
+		"annotations": [],
+		"lastPublishTime": "2026-10-24T14:33:15Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

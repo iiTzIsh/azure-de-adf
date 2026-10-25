@@ -1,0 +1,46 @@
+{
+	"name": "pl_dataflow_orders",
+	"properties": {
+		"activities": [
+			{
+				"name": "df_run_orders",
+				"type": "ExecuteDataFlow",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"dataflow": {
+						"referenceName": "df_orders_to_silver",
+						"type": "DataFlowReference",
+						"datasetParameters": {
+							"orders": {
+								"container": "bronze",
+								"folder": "adf/sales/orders/load_date=2026-10-24",
+								"file_name": "orders.parquet"
+							},
+							"snksilver": {
+								"container": "silver",
+								"folder": "adf/orders_by_branch_month",
+								"file_name": "data.parquet"
+							}
+						}
+					},
+					"compute": {
+						"coreCount": 8,
+						"computeType": "General"
+					},
+					"traceLevel": "Fine"
+				}
+			}
+		],
+		"annotations": [],
+		"lastPublishTime": "2026-10-25T03:59:53Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

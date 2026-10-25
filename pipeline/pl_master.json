@@ -1,0 +1,159 @@
+{
+	"name": "pl_master",
+	"properties": {
+		"activities": [
+			{
+				"name": "ep_ingest",
+				"type": "ExecutePipeline",
+				"dependsOn": [],
+				"policy": {
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "pl_ingest_metadata",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "sp_log_success",
+				"type": "SqlServerStoredProcedure",
+				"dependsOn": [
+					{
+						"activity": "ep_ingest",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"storedProcedureName": "[etl].[usp_log_pipeline_run]",
+					"storedProcedureParameters": {
+						"error_message": {
+							"value": null,
+							"type": "String"
+						},
+						"pipeline_name": {
+							"value": {
+								"value": "@pipeline().Pipeline",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"rows_copied": {
+							"value": null,
+							"type": "Int32"
+						},
+						"run_id": {
+							"value": {
+								"value": "@pipeline().RunId",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"status": {
+							"value": "Succeeded",
+							"type": "String"
+						}
+					}
+				},
+				"linkedServiceName": {
+					"referenceName": "ls_azuresql",
+					"type": "LinkedServiceReference"
+				}
+			},
+			{
+				"name": "sp_log_failure",
+				"type": "SqlServerStoredProcedure",
+				"dependsOn": [
+					{
+						"activity": "ep_ingest",
+						"dependencyConditions": [
+							"Failed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"storedProcedureName": "[etl].[usp_log_pipeline_run]",
+					"storedProcedureParameters": {
+						"error_message": {
+							"value": {
+								"value": "@activity('ep_ingest').error.message",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"pipeline_name": {
+							"value": {
+								"value": "@pipeline().Pipeline",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"rows_copied": {
+							"value": null,
+							"type": "Int32"
+						},
+						"run_id": {
+							"value": {
+								"value": "@pipeline().RunId",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"status": {
+							"value": "Failed",
+							"type": "String"
+						}
+					}
+				},
+				"linkedServiceName": {
+					"referenceName": "ls_azuresql",
+					"type": "LinkedServiceReference"
+				}
+			},
+			{
+				"name": "fail_pipeline",
+				"type": "Fail",
+				"dependsOn": [
+					{
+						"activity": "sp_log_failure",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"message": {
+						"value": "@concat('Ingestion failed: ', activity('ep_ingest').error.message)",
+						"type": "Expression"
+					},
+					"errorCode": "INGEST_FAILED"
+				}
+			}
+		],
+		"annotations": [],
+		"lastPublishTime": "2026-10-24T15:56:52Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

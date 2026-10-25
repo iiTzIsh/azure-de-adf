@@ -1,0 +1,211 @@
+{
+	"name": "pl_incremental_orders",
+	"properties": {
+		"activities": [
+			{
+				"name": "lkp_old_wm",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "SELECT CONVERT(VARCHAR(27), last_value, 121) AS last_value\nFROM etl.adf_watermark WHERE table_name = 'sales.orders'",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "ds_sql_table",
+						"type": "DatasetReference",
+						"parameters": {
+							"schema_name": {
+								"value": "etl",
+								"type": "Expression"
+							},
+							"table_name": {
+								"value": "adf_watermark",
+								"type": "Expression"
+							}
+						}
+					}
+				}
+			},
+			{
+				"name": "lkp_new_wm",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "SELECT CONVERT(VARCHAR(27), MAX(modified_at), 121) AS new_value\nFROM sales.orders",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "ds_sql_table",
+						"type": "DatasetReference",
+						"parameters": {
+							"schema_name": {
+								"value": "sales",
+								"type": "Expression"
+							},
+							"table_name": {
+								"value": "orders",
+								"type": "Expression"
+							}
+						}
+					}
+				}
+			},
+			{
+				"name": "cp_changed_orders",
+				"type": "Copy",
+				"dependsOn": [
+					{
+						"activity": "lkp_old_wm",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "lkp_new_wm",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "SELECT * FROM sales.orders\nWHERE modified_at >  '@{activity('lkp_old_wm').output.firstRow.last_value}'\n  AND modified_at <= '@{activity('lkp_new_wm').output.firstRow.new_value}'",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"sink": {
+						"type": "ParquetSink",
+						"storeSettings": {
+							"type": "AzureBlobFSWriteSettings"
+						},
+						"formatSettings": {
+							"type": "ParquetWriteSettings"
+						}
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "ds_sql_table",
+						"type": "DatasetReference",
+						"parameters": {
+							"schema_name": "sales",
+							"table_name": "orders"
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "ds_adls_parquet",
+						"type": "DatasetReference",
+						"parameters": {
+							"container": "bronze",
+							"folder": {
+								"value": "@concat('adf/sales/orders_incremental/load_date=', formatDateTime(utcNow(), 'yyyy-MM-dd'))",
+								"type": "Expression"
+							},
+							"file_name": {
+								"value": "@concat('orders_', formatDateTime(utcNow(), 'HHmmss'), '.parquet')",
+								"type": "Expression"
+							}
+						}
+					}
+				]
+			},
+			{
+				"name": "sp_update_wm",
+				"type": "SqlServerStoredProcedure",
+				"dependsOn": [
+					{
+						"activity": "cp_changed_orders",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"storedProcedureName": "[etl].[usp_update_adf_watermark]",
+					"storedProcedureParameters": {
+						"new_value": {
+							"value": {
+								"value": "sales.orders",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"table_name": {
+							"value": {
+								"value": "@{activity('lkp_new_wm').output.firstRow.new_value}",
+								"type": "Expression"
+							},
+							"type": "String"
+						}
+					}
+				},
+				"linkedServiceName": {
+					"referenceName": "ls_azuresql",
+					"type": "LinkedServiceReference"
+				}
+			}
+		],
+		"annotations": [],
+		"lastPublishTime": "2026-10-24T15:50:45Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

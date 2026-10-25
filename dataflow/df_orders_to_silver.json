@@ -1,0 +1,68 @@
+{
+	"name": "df_orders_to_silver",
+	"properties": {
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "ds_adls_parquet",
+						"type": "DatasetReference"
+					},
+					"name": "orders"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "ds_adls_parquet",
+						"type": "DatasetReference"
+					},
+					"name": "snksilver"
+				}
+			],
+			"transformations": [
+				{
+					"name": "dcclean"
+				},
+				{
+					"name": "fltvalid"
+				},
+				{
+					"name": "aggbranchmonth"
+				}
+			],
+			"scriptLines": [
+				"source(output(",
+				"          order_id as integer,",
+				"          order_date as date,",
+				"          branch_id as integer,",
+				"          emp_id as integer,",
+				"          customer_name as string,",
+				"          modified_at as timestamp",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     ignoreNoFilesFound: false,",
+				"     format: 'parquet') ~> orders",
+				"orders derive(customer_name = trim(customer_name),",
+				"          order_month = toString(order_date, 'yyyy-MM')) ~> dcclean",
+				"dcclean filter(!isNull(order_date) && branch_id > 0) ~> fltvalid",
+				"fltvalid aggregate(groupBy(branch_id,",
+				"          order_month),",
+				"     orders = count()) ~> aggbranchmonth",
+				"aggbranchmonth sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     format: 'parquet',",
+				"     partitionFileNames:['data.parquet'],",
+				"     truncate: true,",
+				"     umask: 0022,",
+				"     preCommands: [],",
+				"     postCommands: [],",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     partitionBy('hash', 1)) ~> snksilver"
+			]
+		}
+	}
+}
